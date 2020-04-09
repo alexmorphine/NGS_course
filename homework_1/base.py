@@ -40,10 +40,11 @@ class ErrorProb:
             for fastq in self.reads:
                 if self.skip_bad and self.count_n(fastq.seq) >= self.bad_pc:
                     continue
-                padded = self.q(fastq.letter_annotations['phred_quality'])
+                current_quality = fastq.letter_annotations['phred_quality']
+                padded = self.q(current_quality)
                 qualities.append(padded[0])
                 total.append(padded[1])
-                self.raw_qualities.append(fastq.letter_annotations['phred_quality'])
+                self.raw_qualities.append(np.pad(current_quality, (0, self.max_len - len(current_quality))))
             self._quality = np.sum(qualities, axis=0)
             self._error_prob = self._quality / np.sum(total, axis=0)
             self.raw_qualities = np.sum(self.raw_qualities, axis=0) / np.sum(total, axis=0)
@@ -51,7 +52,8 @@ class ErrorProb:
 
     def plot_error_prob(self, ax=None):
         if ax is None:
-            fig, ax = plt.figure(figsize=(3, 2))
+            fig = plt.figure(figsize=(7, 5))
+            ax = fig.add_subplot(111)
         ax.plot([i for i in range(1, self.max_len + 1)], self.error_prob)
         ax.set_title('Mean error per position')
         ax.set_xlabel('Position')
@@ -60,7 +62,8 @@ class ErrorProb:
     def plot_quality(self, ax=None):
         _ = self.error_prob
         if ax is None:
-            fig, ax = plt.figure(figsize=(3, 2))
+            fig = plt.figure(figsize=(7, 5))
+            ax = fig.add_subplot(111)
         ax.plot([i for i in range(1, self.max_len + 1)], self.raw_qualities)
         ax.set_title('Mean quality per position')
         ax.set_xlabel('Position')
@@ -103,7 +106,8 @@ class GCContent:
 
     def plot_gc(self, ax=None):
         if ax is None:
-            fig, ax = plt.figure(figsize=(3, 2))
+            fig = plt.figure(figsize=(7, 5))
+            ax = fig.add_subplot(111)
         content = Counter(sorted(self.gc_content))
         ax.plot(*map(list, [content.keys(), content.values()]), 'bo',
                  *map(list, [content.keys(), content.values()]))
