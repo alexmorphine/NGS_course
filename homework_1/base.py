@@ -14,20 +14,25 @@ class ErrorProb:
         self._error_prob = None
         self._quality = None
         self.raw_qualities = None
+        self.max_len_ = None
 
     def count_n(self, x):
         return x.count('N') / len(x)
 
     @property
     def max_len(self):
-        if self._max_len is None:
+        if self._max_len is None and self.max_len_ is None:
             self._max_len = 0
             for fastq in self.reads:
                 if self.skip_bad and self.count_n(fastq.seq) >= self.bad_pc:
                     continue
                 if len(fastq.seq) > self._max_len:
                     self._max_len = len(fastq.seq)
-        return self._max_len
+            return self._max_len
+        if self._max_len:
+            return self._max_len
+        if self.max_len_:
+            return self.max_len_
 
     def q(self, qualities):
         return np.pad(np.power(10, (- np.array(qualities) / 10)), (0, self.max_len - len(qualities))), \
@@ -36,18 +41,23 @@ class ErrorProb:
     @property
     def error_prob(self):
         if self._error_prob is None:
-            qualities, total, self.raw_qualities = [], [], []
+            qualities, total, self.raw_qualities = np.zeros(self.max_len), np.zeros(self.max_len), \
+                                                   np.zeros(self.max_len)
             for fastq in self.reads:
                 if self.skip_bad and self.count_n(fastq.seq) >= self.bad_pc:
                     continue
                 current_quality = fastq.letter_annotations['phred_quality']
                 padded = self.q(current_quality)
-                qualities.append(padded[0])
-                total.append(padded[1])
-                self.raw_qualities.append(np.pad(current_quality, (0, self.max_len - len(current_quality))))
-            self._quality = np.sum(qualities, axis=0)
-            self._error_prob = self._quality / np.sum(total, axis=0)
-            self.raw_qualities = np.sum(self.raw_qualities, axis=0) / np.sum(total, axis=0)
+                qualities = np.sum([padded[0], qualities], axis=0)
+                total = np.sum([padded[1], total], axis=0)
+                # qualities.append(padded[0])
+                # total.append(padded[1])
+                self.raw_qualities = np.sum([self.raw_qualities,
+                                             np.pad(current_quality, (0, self.max_len - len(current_quality)))], axis=0)
+                # self.raw_qualities.append(np.pad(current_quality, (0, self.max_len - len(current_quality))))
+            # self._quality = np.sum(qualities, axis=0)
+            self._error_prob = qualities / total
+            self.raw_qualities = self.raw_qualities / total
         return self._error_prob
 
     def plot_error_prob(self, ax=None):
@@ -110,7 +120,7 @@ class GCContent:
             ax = fig.add_subplot(111)
         content = Counter(sorted(self.gc_content))
         ax.plot(*map(list, [content.keys(), content.values()]), 'bo',
-                 *map(list, [content.keys(), content.values()]))
+                *map(list, [content.keys(), content.values()]))
 
         ax.set_title('GC content')
         ax.set_xlabel('GC content, share')
@@ -126,6 +136,7 @@ class FastQRead(GCContent, ErrorProb):
         self.skip_bad = skip_bad
         self.bad_pc = bad_pc
         self.reads = self.get_reads()
+        self.max_len_ = None
         GCContent.__init__(self, self.reads, no_n=no_n, skip_bad=skip_bad, bad_pc=bad_pc)
         ErrorProb.__init__(self, self.reads, skip_bad=skip_bad, bad_pc=bad_pc)
 
@@ -133,13 +144,19 @@ class FastQRead(GCContent, ErrorProb):
         try:
             return self.read_file()
         except ValueError:
+            print(f'File {self.filename} is broken')
             self.read_bad_file()
             return self.read_file()
 
     def read_file(self):
+        self.max_len_ = 0
         reads = []
         for record in SeqIO.parse(self.filename, 'fastq'):
             reads.append(record)
+            if self.skip_bad and self.count_n(record.seq) >= self.bad_pc:
+                continue
+            if len(record.seq) > self.max_len_:
+                self.max_len_ = len(record.seq)
         return reads
 
     def read_bad_file(self):
@@ -172,5 +189,6 @@ class FastQRead(GCContent, ErrorProb):
         with open(self.filename, 'w') as f:
             for item in new_data:
                 f.write(f'{item}\n')
+        del new_data
 
 
