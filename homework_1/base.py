@@ -50,12 +50,8 @@ class ErrorProb:
                 padded = self.q(current_quality)
                 qualities = np.sum([padded[0], qualities], axis=0)
                 total = np.sum([padded[1], total], axis=0)
-                # qualities.append(padded[0])
-                # total.append(padded[1])
                 self.raw_qualities = np.sum([self.raw_qualities,
                                              np.pad(current_quality, (0, self.max_len - len(current_quality)))], axis=0)
-                # self.raw_qualities.append(np.pad(current_quality, (0, self.max_len - len(current_quality))))
-            # self._quality = np.sum(qualities, axis=0)
             self._error_prob = qualities / total
             self.raw_qualities = self.raw_qualities / total
         return self._error_prob
